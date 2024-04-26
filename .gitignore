@@ -1,0 +1,4 @@
+# Visual Studio Project Files
+*.vcxproj
+x64/
+x86/
