@@ -99,10 +99,10 @@ void printSeatInfo(int isMaster)
 // 관리자 모드 함수
 void adminMode(int* MaxTime, int* MaxRenewable, int* OpenTime, int* CloseTime)
 {
-    int menu_sel = -1, tmp = 0;
+    int menu_sel = -1, tmp = 0, oldData = 0;
     while (1)
     {
-        printf("1 : 좌석 초기화, 2 : 최대 사용 가능 시간 수정, 3: 연장 가능 시간 수정, 4 : 개장시각 수정, 5: 폐장시각 수정, 6: 모든 좌석 정보 보기, 0: 나가기 : ");
+        printf("1 : 좌석 초기화, 2 : 최대 이용 가능 시간 수정, 3: 연장 가능 시간 수정, 4 : 개장시각 수정, 5: 폐장시각 수정, 6: 모든 좌석 정보 보기, 0: 나가기 : ");
         scanf("%d", &menu_sel);
         switch (menu_sel)
         {
@@ -110,40 +110,77 @@ void adminMode(int* MaxTime, int* MaxRenewable, int* OpenTime, int* CloseTime)
             resetSeats();
             break;
         case 2:
-            printf("현재 최대 사용 가능 시간 : %d 시간 %d 분\n", *MaxTime / 60, *MaxTime % 60);
-            printf("최대 사용 가능 시간 수정. 시간 : ");
-            scanf("%d", &tmp);
-            *MaxTime = tmp * 60;
-            printf("분 : ");
-            scanf("%d", &tmp);
-            *MaxTime += tmp;
+            oldData = *MaxTime;
+            do {
+                *MaxTime = oldData;
+                printf("현재 최대 이용 가능 시간 : %d 시간 %d 분\n", *MaxTime / 60, *MaxTime % 60);
+                printf("최대 이용 가능 시간 수정. 시간 : ");
+                scanf("%d", &tmp);
+                *MaxTime = tmp * 60;
+                printf("분 : ");
+                scanf("%d", &tmp);
+                *MaxTime += tmp;
+
+                if (*MaxTime <= 0 || *MaxTime > 24 * 60)
+                {
+                    printf("최대 이용 가능 시간은 1분 이상 24시간 이하여야 합니다.\n");
+                }
+            } while (*MaxTime <= 0 || *MaxTime > 24 * 60);
             break;
         case 3:
-            printf("현재 최대 사용 가능 시간 : 끝나기 %d 시간 %d 분 전\n", *MaxRenewable / 60, *MaxRenewable % 60);
-            printf("연장 가능 시간 수정. 시간 : ");
-            scanf("%d", &tmp);
-            *MaxRenewable = tmp * 60;
-            printf("분 : ");
-            scanf("%d", &tmp);
-            *MaxRenewable += tmp;
+            oldData = *MaxRenewable;
+            do {
+                *MaxRenewable = oldData;
+                printf("현재 최대 이용 가능 시간 : %d 시간 %d 분\n", *MaxTime / 60, *MaxTime % 60);
+                printf("현재 연장 가능 시간 : 끝나기 %d 시간 %d 분 전\n", *MaxRenewable / 60, *MaxRenewable % 60);
+                printf("연장 가능 시간 수정. 시간 : ");
+                scanf("%d", &tmp);
+                *MaxRenewable = tmp * 60;
+                printf("분 : ");
+                scanf("%d", &tmp);
+                *MaxRenewable += tmp;
+
+                if ((*MaxRenewable < 0 || *MaxRenewable > 24 * 60) || (*MaxTime < *MaxRenewable))
+                {
+                    printf("연장 가능 시간은 0분 이상 24시간 이하여야 하며, 최대 이용 가능 시간을 초과할 수 없습니다.\n");
+                }
+            } while ((*MaxRenewable < 0 || *MaxRenewable > 24 * 60) || (*MaxTime < *MaxRenewable));
             break;
         case 4:
-            printf("현재 개장 시각 : %d시 %d분, 현재 폐장 시각 : %d시 %d분\n", *OpenTime / 60, *OpenTime % 60, *CloseTime / 60, *CloseTime % 60);
-            printf("개장 시각 수정(폐장 시각과 동일하면 24시간) 시간 : ");
-            scanf("%d", &tmp);
-            *OpenTime = tmp * 60;
-            printf("분 : ");
-            scanf("%d", &tmp);
-            *OpenTime += tmp;
+            oldData = *OpenTime;
+            do {
+                *OpenTime = oldData;
+                printf("현재 개장 시각 : %d시 %d분, 현재 폐장 시각 : %d시 %d분\n", *OpenTime / 60, *OpenTime % 60, *CloseTime / 60, *CloseTime % 60);
+                printf("개장 시각 수정(폐장 시각과 동일하면 24시간) 시간 : ");
+                scanf("%d", &tmp);
+                *OpenTime = tmp * 60;
+                printf("분 : ");
+                scanf("%d", &tmp);
+                *OpenTime += tmp;
+
+                if (*OpenTime < 0 || *OpenTime >= 24 * 60)
+                {
+                    printf("개장 시각은 0시 0분부터 23시 59분까지로 설정 가능합니다.\n");
+                }
+            } while ((*OpenTime < 0 || *OpenTime >= 24 * 60));
             break;
         case 5:
-            printf("현재 개장 시각 : %d시 %d분, 현재 폐장 시각 : %d시 %d분\n", *OpenTime / 60, *OpenTime % 60, *CloseTime / 60, *CloseTime % 60);
-            printf("폐장 시각 수정(개장 시각과 동일하면 24시간) 시간 : ");
-            scanf("%d", &tmp);
-            *CloseTime = tmp * 60;
-            printf("분 : ");
-            scanf("%d", &tmp);
-            *CloseTime += tmp;
+            oldData = *CloseTime;
+            do {
+                *CloseTime = oldData;
+                printf("현재 개장 시각 : %d시 %d분, 현재 폐장 시각 : %d시 %d분\n", *OpenTime / 60, *OpenTime % 60, *CloseTime / 60, *CloseTime % 60);
+                printf("폐장 시각 수정(개장 시각과 동일하면 24시간) 시간 : ");
+                scanf("%d", &tmp);
+                *CloseTime = tmp * 60;
+                printf("분 : ");
+                scanf("%d", &tmp);
+                *CloseTime += tmp;
+
+                if (*CloseTime < 0 || *CloseTime >= 24 * 60)
+                {
+                    printf("폐장 시각은 0시 0분부터 23시 59분까지로 설정 가능합니다.\n");
+                }
+            } while ((*CloseTime < 0 || *CloseTime >= 24 * 60));
             break;
         case 6:
             printSeatInfo(1);
@@ -553,7 +590,7 @@ int main()
             if ((OPEN_TIME < CLOSE_TIME) && (tmp_time >= CLOSE_TIME * 60 || tmp_time < OPEN_TIME * 60)) //개장 전이거나 폐장 이후이며 개장시간이 폐장시간보다 빠른 경우.
             {
                 printf("운영시간이 아닙니다.\n");
-            }else if ((OPEN_TIME > CLOSE_TIME) && (tmp_time <= CLOSE_TIME * 60 && tmp_time > OPEN_TIME * 60)){ //개장 전이거나 폐장 이후이며 폐장시간이 개장시간보다 빠른 경우.
+            }else if ((OPEN_TIME > CLOSE_TIME) && (tmp_time >= CLOSE_TIME * 60 && tmp_time < OPEN_TIME * 60)){ //개장 전이거나 폐장 이후이며 폐장시간이 개장시간보다 빠른 경우.
                 printf("운영시간이 아닙니다.\n");
             }else{
                 //운영시간 내라면(24시간제 포함)
@@ -571,7 +608,7 @@ int main()
             if ((tmp_time >= CLOSE_TIME * 60 || tmp_time < OPEN_TIME * 60) && (OPEN_TIME < CLOSE_TIME)) //개장 전이거나 폐장 이후이며 개장시간이 폐장시간보다 빠른 경우.
             {
                 init(); //좌석 초기화
-            }else if ((tmp_time <= CLOSE_TIME * 60 && tmp_time > OPEN_TIME * 60) && (OPEN_TIME > CLOSE_TIME)){ //개장 전이거나 폐장 이후이며 폐장시간이 개장시간보다 빠른 경우.
+            }else if ((tmp_time >= CLOSE_TIME * 60 && tmp_time < OPEN_TIME * 60) && (OPEN_TIME > CLOSE_TIME)){ //개장 전이거나 폐장 이후이며 폐장시간이 개장시간보다 빠른 경우.
                 init(); //좌석 초기화
             }
         }
