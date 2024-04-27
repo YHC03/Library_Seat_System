@@ -10,9 +10,8 @@
 *
 *
 * 문제점(버그)
-* 24시간 배정 오류
-* 밤에 열고 아침에 닫는 경우 버그 발생 가능
-* 자동 초기화는 가능하나 문닫기는 안됨.
+* 개장시간이 폐장시간보다 늦는 경우 연장불가 버그 발생.
+* 폐장시간을 앞당기는 경우, 이용시간이 초기화되지 않음.
 *
 * 작성자 : YHC03
 * 작성일 : 2024/4/25-2024/4/27
@@ -21,7 +20,7 @@
 
 #define SEATS 10
 char seatsName[SEATS][20]; // 좌석 사용자명 기록, ""(strlen=0)이면 빈 좌석
-long long int endTime[SEATS]; //사용 종료시각 기록(Unix 시간)-초 단위
+long long int endTime[SEATS]; //사용 종료시각 기록(Unix 시간) - 초 단위
 
 // 좌석 초기화
 void resetSeats()
@@ -173,7 +172,7 @@ void init()
 
 // 연장가능 시각 출력
 // 폐장시간 직전에 오류 발생 가능
-void printRenewTime(int location, int* renewableTime)
+void printRenewTime(int location, int* renewableTime, int* lclEndTime)
 {
     time_t Time;
     struct tm* pTime;
@@ -204,7 +203,7 @@ void printRenewTime(int location, int* renewableTime)
     int computeMinute = remainMinute + currMin - (*renewableTime % 60);
     int computeHour = remainHour + currHour - (*renewableTime / 60);
 
-    if ((endTime[location] - (*renewableTime * 60)) < (long long int)Time) // 종료시간이 임박하여 연장불가한 경우
+    if ((endTime[location] - ((long long int)Time)) >= ((*lclEndTime * 60) - currHour * 60 * 60 - currMin * 60 - currSecond)) // 종료시간이 임박하여 연장불가한 경우. 개장시각이 폐장시각보다 늦는 경우 오류 발생함.
     {
         printf("연장 불가\n");
         return;
@@ -249,11 +248,7 @@ void printRenewTime(int location, int* renewableTime)
     return;
 }
 
-/*
-* 사람의 이름으로 좌석번호를 찾는 함수
-* 입력값 : 입력한 이름
-* 출력값 : 입력한 사람의 좌석 인덱스
-*/
+// 이용자명을 이용해 좌석번호를 찾는 함수
 int findUser(char* tmpName)
 {
     for (int i = 0; i < SEATS; i++)
@@ -266,7 +261,7 @@ int findUser(char* tmpName)
     return -1;
 }
 
-// 만석인 경우를 찾에서 출력
+// 만석인 경우를 찾아서 출력. 만석이면 1 출력.
 int isFull()
 {
     for (int i = 0; i < SEATS; i++)
@@ -320,14 +315,9 @@ void setSeat(char* tmpName, int location, int* maxTime, int* startTime, int* lcl
     return;
 }
 
-/*
-* 좌석이 연장 가능한지 확인하는 함수
-* 1 : 연장 가능
-* 0 : 연장 불가
-* 
-* 폐장시간 직전에 오류 발생 가능
-*/
-int isRenewable(int location, int* maxRenewTime)
+//좌석이 연장 가능한지 확인하는 함수(연장 가능시 1 출력)
+//폐장시간 직전에 오류 발생 가능
+int isRenewable(int location, int* maxRenewTime, int* lclEndTime)
 {
     time_t Time;
     struct tm* pTime;
@@ -335,13 +325,12 @@ int isRenewable(int location, int* maxRenewTime)
     pTime = localtime(&Time);
 
     long long int tmpTime = endTime[location] - (long long int)(Time);
-    return (tmpTime <= *maxRenewTime * 60);
+    return (tmpTime <= *maxRenewTime * 60) && ((endTime[location] - ((long long int)Time)) < ((*lclEndTime * 60) - (pTime->tm_hour) * 60 * 60 - (pTime->tm_min) * 60 - (pTime->tm_sec)));
 }
 
 // 좌석 연장
 void renewSeat(int location, int* maxTime, int* startTime, int* lclEndTime)
 {
-    //기본적으로 setSeat() 함수와 동일함. 하지만, 이름 복사는 제외.
     time_t Time;
     Time = time(NULL);
 
@@ -376,6 +365,7 @@ void seatSelector(char* tmpName, int* maxTime, int* maxRenew, int* startTime, in
             printf("만석입니다.\n");
             return;
         }
+
         // 좌석 있으면
         printSeatInfo(0); //User용 좌석 목록 출력
         // 좌석 선택
@@ -399,18 +389,24 @@ void seatSelector(char* tmpName, int* maxTime, int* maxRenew, int* startTime, in
             }
         }
         setSeat(tmpName, tmpSeatNo, maxTime, startTime, lclEndTime); // 좌석 배정
-        printRenewTime(tmpSeatNo, maxRenew); // 폐장시간 직전에 오류 발생 가능
+
+        // 연장가능시각, 이용종료시각 출력
+        printRenewTime(tmpSeatNo, maxRenew, lclEndTime); // 폐장시간 직전에 오류 발생 가능
         printEndTime(tmpSeatNo);
 
     }else{ //좌석 사용중인 사람
-        //확인&연장 창
-        //연장 가능한지 확인하고
-        isRenewableRes = isRenewable(findUser(tmpName), maxRenew);
-        printRenewTime(tmpSeatNo, maxRenew); // 폐장시간 직전에 오류 발생 가능
-        printEndTime(tmpSeatNo);
+        // 연장 가능여부 확인
+        isRenewableRes = isRenewable(findUser(tmpName), maxRenew, lclEndTime);
+
+        // 좌석정보, 연장가능시각, 이용종료시각 출력
+        printf("%d번 좌석\n", location + 1);
+        printRenewTime(location, maxRenew, lclEndTime); // 폐장시간 직전에 오류 발생 가능
+        printEndTime(location);
+
+        // 연장, 퇴실여부 확인
         while (1)
         {
-            if (isRenewableRes)
+            if (isRenewableRes) // 연장 가능하면
             {
                 printf("연장 : 1, ");
             }
@@ -423,22 +419,26 @@ void seatSelector(char* tmpName, int* maxTime, int* maxRenew, int* startTime, in
                 printf("다시 입력해 주세요.\n");
             }
         }
+
+        // 이용자의 좌석정보를 불러옴
         tmpSeatNo = findUser(tmpName);
         switch (tmpMenu)
         {
-            //연장
+            // 연장
         case 1:
             renewSeat(tmpSeatNo, maxTime, startTime, lclEndTime);
-            printRenewTime(tmpSeatNo, maxRenew); // 폐장시간 직전에 오류 발생 가능
+
+            // 좌석 정보 출력
+            printRenewTime(tmpSeatNo, maxRenew, lclEndTime); // 폐장시간 직전에 오류 발생 가능
             printEndTime(tmpSeatNo);
             break;
 
-            //반납
+            // 반납
         case 2:
             checkOut(tmpSeatNo);
             break;
 
-            //취소
+            // 취소
         case 3:
             return;
         }
@@ -446,9 +446,7 @@ void seatSelector(char* tmpName, int* maxTime, int* maxRenew, int* startTime, in
     return;
 }
 
-/*
-* 좌석이 만료된 경우, 좌석 지정을 해제함
-*/
+//좌석이 만료된 경우, 좌석 지정을 해제함
 void seatInvalidCheck()
 {
     time_t Time;
@@ -463,15 +461,6 @@ void seatInvalidCheck()
             endTime[i] = 0;
         }
     }
-    return;
-}
-
-// 좌석 정보 확인(좌석번호, 종료시각)
-// 사용중 상태에서만 호출됨
-void viewSeat(int location)
-{
-    printf("%d번 좌석\n", location + 1);
-    printEndTime(location);
     return;
 }
 
@@ -501,11 +490,13 @@ int main()
         }else{
             pTime = localtime(&Time);
             tmp_time = (pTime->tm_hour * 60 * 60) + (pTime->tm_min * 60) + (pTime->tm_sec);
-            if ((tmp_time >= CLOSE_TIME * 60 || tmp_time < OPEN_TIME * 60) && OPEN_TIME != CLOSE_TIME) //개장 전이거나 폐장 이후이며 24시간이 아닌 경우. 야간개장 주간폐장은 추후 반영 예정.
+            if ((OPEN_TIME < CLOSE_TIME) && (tmp_time >= CLOSE_TIME * 60 || tmp_time < OPEN_TIME * 60)) //개장 전이거나 폐장 이후이며 개장시간이 폐장시간보다 빠른 경우.
             {
                 printf("운영시간이 아닙니다.\n");
+            }else if ((OPEN_TIME > CLOSE_TIME) && (tmp_time <= CLOSE_TIME * 60 && tmp_time > OPEN_TIME * 60)){ //개장 전이거나 폐장 이후이며 폐장시간이 개장시간보다 빠른 경우.
+                printf("운영시간이 아닙니다.\n");
             }else{
-                //운영시간 내라면
+                //운영시간 내라면(24시간제 포함)
                 seatSelector(tmpName, &MAX_TIME, &MAX_RENEWABLE_TIME, &OPEN_TIME, &CLOSE_TIME);
             }
         }
@@ -517,8 +508,10 @@ int main()
             //자동퇴실에만 맡길수 없는 이유 : 관리자가 운영시간 바꾼 경우
             pTime = localtime(&Time);
             tmp_time = (pTime->tm_hour * 60 * 60) + (pTime->tm_min * 60) + (pTime->tm_sec);
-            if (tmp_time >= CLOSE_TIME * 60 || tmp_time < OPEN_TIME * 60) //개장 전이거나 폐장 이후인 경우. 야간개장 주간폐장은 추후 구현 예정
+            if ((tmp_time >= CLOSE_TIME * 60 || tmp_time < OPEN_TIME * 60) && (OPEN_TIME < CLOSE_TIME)) //개장 전이거나 폐장 이후이며 개장시간이 폐장시간보다 빠른 경우.
             {
+                init(); //좌석 초기화
+            }else if ((tmp_time <= CLOSE_TIME * 60 && tmp_time > OPEN_TIME * 60) && (OPEN_TIME > CLOSE_TIME)){ //개장 전이거나 폐장 이후이며 폐장시간이 개장시간보다 빠른 경우.
                 init(); //좌석 초기화
             }
         }
