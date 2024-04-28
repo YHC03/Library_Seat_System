@@ -11,25 +11,33 @@
 *
 * 문제점(버그)
 * 폐장시간을 앞당기는 경우, 이용시간이 초기화되지 않음.
-* 
-* (2024/4/28) 개장시각 및 폐장시각 관련 오류는 수정되었음. 하지만, 아직 발견하지 못한 오류가 있을 수 있음.
+* 연장시각이 익일인 경우, 일부 경우에서 익일이라는 표현이 출력되지 않는 오류가 발생함.
 *
+* 
 * 작성자 : YHC03
 * 작성일 : 2024/4/25-2024/4/28
 */
 
-
+// 좌석 수 설정
 #define SEATS 10
-char seatsName[SEATS][20]; // 좌석 사용자명 기록, ""(strlen=0)이면 빈 좌석
-long long int endTime[SEATS]; //사용 종료시각 기록(Unix 시간) - 초 단위
+
+// 사용자 데이터를 저장하는 구조체 생성
+struct userData
+{
+    char seatsName[20]; // 좌석 사용자명 기록, ""(strlen=0)이면 빈 좌석
+    long long int endTime; //사용 종료시각 기록(Unix 시간) - 초 단위
+};
+
+// 전역 변수로 사용자 데이터 저장소 생성
+struct userData user[SEATS];
 
 // 좌석 초기화
 void resetSeats()
 {
     for (int i = 0; i < SEATS; i++)
     {
-        strncpy(seatsName[i], "", 20);
-        endTime[i] = 0;
+        strncpy((user + i)->seatsName, "", 20);
+        (user + i)->endTime = 0;
     }
     return;
 }
@@ -41,13 +49,13 @@ void printEndTime(int location)
     struct tm* pTime;
     Time = time(NULL);
     pTime = localtime(&Time);
-    if (!strlen(seatsName[location]))
+    if (!strlen((user + location)->seatsName))
     {
         return;
     }
 
     // 남은 시간
-    int remainSecondOrig = endTime[location] - ((long long int)Time);
+    int remainSecondOrig = (user + location)->endTime - ((long long int)Time);
     int remainHour = remainSecondOrig / 3600;
     int remainMinute = (remainSecondOrig % 3600) / 60;
     int remainSecond = remainSecondOrig % 60;
@@ -88,10 +96,10 @@ void printSeatInfo(int isMaster)
     {
         if (isMaster) // 관리자 여부 확인
         {
-            printf("%d번 좌석 : %s\n", i + 1, strlen(seatsName[i]) ? seatsName[i] : "Empty");
+            printf("%d번 좌석 : %s\n", i + 1, strlen((user + i)->seatsName) ? (user + i)->seatsName : "Empty");
         }
         else {
-            printf("%d번 좌석 : %s\n", i + 1, strlen(seatsName[i]) ? "Used" : "Empty");
+            printf("%d번 좌석 : %s\n", i + 1, strlen((user + i)->seatsName) ? "Used" : "Empty");
         }
     }
 }
@@ -126,6 +134,11 @@ void adminMode(int* MaxTime, int* MaxRenewable, int* OpenTime, int* CloseTime)
                     printf("최대 이용 가능 시간은 1분 이상 24시간 이하여야 합니다.\n");
                 }
             } while (*MaxTime <= 0 || *MaxTime > 24 * 60);
+            if (*MaxTime < *MaxRenewable)
+            {
+                *MaxRenewable = *MaxTime;
+                printf("최대 이용 가능시간 변경으로 인해 연장 가능 시간이 끝나기 %d 시간 %d 분 전으로 변경되었습니다.\n", *MaxRenewable / 60, *MaxRenewable % 60);
+            }
             break;
         case 3:
             oldData = *MaxRenewable;
@@ -220,13 +233,13 @@ void printRenewTime(int location, int* renewableTime, int* startTime, int* lclEn
     int isTomorrow = 0; // 익일 여부 판단
 
     // 빈자리 처리
-    if (!strlen(seatsName[location]))
+    if (!strlen((user + location)->seatsName))
     {
         return;
     }
 
     // 남은 시간
-    long long int remainSecondOrig = endTime[location] - ((long long int)Time);
+    long long int remainSecondOrig = (user + location)->endTime - ((long long int)Time);
     int remainHour = remainSecondOrig / 3600;
     int remainMinute = (remainSecondOrig % 3600) / 60;
     int remainSecond = remainSecondOrig % 60;
@@ -242,26 +255,26 @@ void printRenewTime(int location, int* renewableTime, int* startTime, int* lclEn
     int computeMinute = remainMinute + currMin - (*renewableTime % 60);
     int computeHour = remainHour + currHour - (*renewableTime / 60);
 
-    if (*startTime < *endTime) // 개장시각이 폐장시각보다 앞에 있는 경우
+    if (*startTime < *lclEndTime) // 개장시각이 폐장시각보다 앞에 있는 경우
     {
         // 종료 시각(초) - 현재 시각(초) >= 폐장 시각(초) - 현재 시각(초) = 남은 시각(초)
-        if ((endTime[location] - ((long long int)Time)) >= ((*lclEndTime * 60) - currHour * 60 * 60 - currMin * 60 - currSecond)) // 종료시간이 임박하여 연장불가한 경우
+        if (((user + location)->endTime - ((long long int)Time)) >= ((*lclEndTime * 60) - currHour * 60 * 60 - currMin * 60 - currSecond)) // 종료시간이 임박하여 연장불가한 경우
         {
             printf("연장 불가\n");
             return;
         }
-    }else if (*startTime > *endTime){
+    }else if (*startTime > *lclEndTime){
         if (((*startTime * 60) - currHour * 60 * 60 - currMin * 60 - currSecond) >= 0) // 개장시각이 폐장시각보다 뒤에 있으며, 00시를 지난 경우 (개장 시각 이후)
         {
             // 종료 시각(초) - 현재 시각(초) >= 폐장 시각(초) - 현재 시각(초) = 남은 시각(초)
-            if ((endTime[location] - ((long long int)Time)) >= ((*lclEndTime * 60) - currHour * 60 * 60 - currMin * 60 - currSecond)) // 종료시간이 임박하여 연장불가한 경우
+            if (((user + location)->endTime - ((long long int)Time)) >= ((*lclEndTime * 60) - currHour * 60 * 60 - currMin * 60 - currSecond)) // 종료시간이 임박하여 연장불가한 경우
             {
                 printf("연장 불가\n");
                 return;
             }
         }else{ // 개장시각이 폐장시각보다 뒤에 있으며, 00시를 지나지 않은 경우 (개장 시각 이전)
             // 종료 시각(초) - 현재 시각(초) >= 폐장 시각(초) + 86400 - 현재 시각(초) = 남은 시각(초)
-            if ((endTime[location] - ((long long int)Time)) >= ((*lclEndTime * 60) + 24 * 60 * 60 - currHour * 60 * 60 - currMin * 60 - currSecond)) // 종료시간이 임박하여 연장불가한 경우
+            if (((user + location)->endTime - ((long long int)Time)) >= ((*lclEndTime * 60) + 24 * 60 * 60 - currHour * 60 * 60 - currMin * 60 - currSecond)) // 종료시간이 임박하여 연장불가한 경우
             {
                 printf("연장 불가\n");
                 return;
@@ -315,7 +328,7 @@ int findUser(char* tmpName)
 {
     for (int i = 0; i < SEATS; i++)
     {
-        if (!strcmp(seatsName[i], tmpName))
+        if (!strcmp((user+i)->seatsName, tmpName))
         {
             return i;
         }
@@ -328,7 +341,7 @@ int isFull()
 {
     for (int i = 0; i < SEATS; i++)
     {
-        if (!strlen(seatsName[i])) // 빈 좌석 발견 시
+        if (!strlen((user + i)->seatsName)) // 빈 좌석 발견 시
         {
             return 0;
         }
@@ -371,13 +384,13 @@ void setSeat(char* tmpName, int location, int* maxTime, int* startTime, int* lcl
 {
     time_t Time;
     Time = time(NULL);
-    strncpy(seatsName[location], tmpName, 20);
+    strncpy((user + location)->seatsName, tmpName, 20);
     int leftTime = leftSeconds(startTime, lclEndTime);
     if ((*maxTime * 60) > leftTime) // 폐장시간까지 얼마 안남은경우
     {
-        endTime[location] = (long long int)(Time) + leftTime; // 분단위인 시각을 초단위로 변경
+        (user + location)->endTime = (long long int)(Time) + leftTime; // 분단위인 시각을 초단위로 변경
     }else{
-        endTime[location] = (long long int)(Time) + *maxTime * 60; // 분단위인 시각을 초단위로 변경
+        (user + location)->endTime = (long long int)(Time) + *maxTime * 60; // 분단위인 시각을 초단위로 변경
     }
     return;
 }
@@ -393,26 +406,26 @@ int isRenewable(int location, int* maxRenewTime, int* startTime, int* lclEndTime
 
     int answer = 1;
 
-    long long int tmpTime = endTime[location] - (long long int)(Time);
+    long long int tmpTime = (user + location)->endTime - (long long int)(Time);
 
-    if (*startTime < *endTime) // 개장시각이 폐장시각보다 앞에 있는 경우
+    if (*startTime < *lclEndTime) // 개장시각이 폐장시각보다 앞에 있는 경우
     {
         // 개인별 종료 시각(Unix 초) - 현재 시각(Unix 초) >= 폐장 시각(초) - 현재 시각(초) = 남은 시각(초)
-        if ((endTime[location] - ((long long int)Time)) >= ((*lclEndTime * 60) - (pTime->tm_hour) * 60 * 60 - (pTime->tm_min) * 60 - (pTime->tm_sec))) // 종료시간이 임박하여 연장불가한 경우
+        if (((user + location)->endTime - ((long long int)Time)) >= ((*lclEndTime * 60) - (pTime->tm_hour) * 60 * 60 - (pTime->tm_min) * 60 - (pTime->tm_sec))) // 종료시간이 임박하여 연장불가한 경우
         {
             answer = 0;
         }
-    }else if (*startTime > *endTime){
+    }else if (*startTime > *lclEndTime){
         if (((*startTime * 60) - (pTime->tm_hour) * 60 * 60 - (pTime->tm_min) * 60 - (pTime->tm_sec)) >= 0) // 개장시각이 폐장시각보다 뒤에 있으며, 00시를 지난 경우 (개장 시각 이후)
         {
             // 개인별 종료 시각(Unix 초) - 현재 시각(Unix 초) >= 폐장 시각(초) - 현재 시각(초) = 남은 시각(초)
-            if ((endTime[location] - ((long long int)Time)) >= ((*lclEndTime * 60) - (pTime->tm_hour) * 60 * 60 - (pTime->tm_min) * 60 - (pTime->tm_sec))) // 종료시간이 임박하여 연장불가한 경우
+            if (((user + location)->endTime - ((long long int)Time)) >= ((*lclEndTime * 60) - (pTime->tm_hour) * 60 * 60 - (pTime->tm_min) * 60 - (pTime->tm_sec))) // 종료시간이 임박하여 연장불가한 경우
             {
                 answer = 0;
             }
         }else{ // 개장시각이 폐장시각보다 뒤에 있으며, 00시를 지나지 않은 경우 (개장 시각 이전)
             // 개인별 종료 시각(Unix 초) - 현재 시각(Unix 초) >= 폐장 시각(초) + 86400 - 현재 시각(초) = 남은 시각(초)
-            if ((endTime[location] - ((long long int)Time)) >= ((*lclEndTime * 60) + 24 * 60 * 60 - (pTime->tm_hour) * 60 * 60 - (pTime->tm_min) * 60 - (pTime->tm_sec))) // 종료시간이 임박하여 연장불가한 경우
+            if (((user + location)->endTime - ((long long int)Time)) >= ((*lclEndTime * 60) + 24 * 60 * 60 - (pTime->tm_hour) * 60 * 60 - (pTime->tm_min) * 60 - (pTime->tm_sec))) // 종료시간이 임박하여 연장불가한 경우
             {
                 answer = 0;
             }
@@ -432,12 +445,12 @@ void renewSeat(int location, int* maxTime, int* startTime, int* lclEndTime)
     int leftTime = leftSeconds(startTime, lclEndTime); // 현재 시각 기준 폐장까지 남은 시간 출력
 
     // 개인별 종료 시각(Unix 초) - 현재 시각(Unix 초) + 연장 시간(초) > 남은 시간(초)
-    if ((endTime[location] - ((long long int)Time) + (*maxTime * 60)) > leftTime) // 폐장시간까지 얼마 안남은경우
+    if (((user + location)->endTime - ((long long int)Time) + (*maxTime * 60)) > leftTime) // 폐장시간까지 얼마 안남은경우
     {
-        endTime[location] = ((long long int)(Time)) + leftTime; // 분단위인 시각을 초단위로 변경
+        (user + location)->endTime = ((long long int)(Time)) + leftTime; // 분단위인 시각을 초단위로 변경
     }else{
-        //기존 이용시간에 기본 이용시간 추가, endTime에는 Unix 시간을 저장하므로 날짜가 바뀌어서 생기는 문제는 없음.
-        endTime[location] += *maxTime * 60; // 분단위인 시각을 초단위로 변경
+        //기존 이용시간에 기본 이용시간 추가, (user + i)->endTime에는 Unix 시간을 저장하므로 날짜가 바뀌어서 생기는 문제는 없음.
+        (user + location)->endTime += *maxTime * 60; // 분단위인 시각을 초단위로 변경
     }
     return;
 }
@@ -445,8 +458,8 @@ void renewSeat(int location, int* maxTime, int* startTime, int* lclEndTime)
 // 퇴실
 void checkOut(int location)
 {
-    strncpy(seatsName[location], "", 20);
-    endTime[location] = 0;
+    strncpy((user + location)->seatsName, "", 20);
+    (user + location)->endTime = 0;
     return;
 }
 
@@ -478,7 +491,7 @@ void seatSelector(char* tmpName, int* maxTime, int* maxRenew, int* startTime, in
                 }
             } while (tmpSeatNo < 0 || tmpSeatNo >= SEATS);
             // 좌석 찼는지 확인하고
-            if (strlen(seatsName[tmpSeatNo]))
+            if (strlen((user + tmpSeatNo)->seatsName))
             {
                 printf("이미 사용중인 좌석입니다.\n다른 좌석을 선택해주세요.\n");
             }else{
@@ -552,10 +565,10 @@ void seatInvalidCheck()
     for (int i = 0; i < SEATS; i++)
     {
         // Unix 시간 기준이므로, 다음날 구분은 자동으로 가능함.
-        if ((endTime[i] < (int)Time) && endTime[i]) //endTime=0(미배정)은 예외
+        if (((user + i)->endTime < (int)Time) && (user + i)->endTime) //(user + i)->endTime=0(미배정)은 예외
         {
-            strncpy(seatsName[i], "", 20);
-            endTime[i] = 0;
+            strncpy((user + i)->seatsName, "", 20);
+            (user + i)->endTime = 0;
         }
     }
     return;
