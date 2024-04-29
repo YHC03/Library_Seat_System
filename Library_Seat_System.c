@@ -1,6 +1,6 @@
 ﻿#include <stdio.h>
-#include <string.h> // strcpy, strlen
-#include <time.h> // 현재 시각
+#include <string.h>
+#include <time.h>
 
 /* 열람실 좌석관리시스템
 * 일반 사용자
@@ -15,19 +15,20 @@
 *
 * 
 * 작성자 : YHC03
-* 작성일 : 2024/4/25-2024/4/28
+* 작성일 : 2024/4/25-2024/4/29
 */
 
 // 좌석 수 설정
 #define SEATS 10
 
 // 사용자 데이터를 저장하는 구조체 생성
-struct UserData
+typedef struct userData
 {
     char seatsName[20]; // 좌석 사용자명 기록, ""(strlen=0)이면 빈 좌석
     long long int endTime; //사용 종료시각 기록(Unix 시간) - 초 단위
-};
+} UserData;
 
+// 열람실 운영정보를 저장하는 구조체 생성
 typedef struct libraryData
 {
     int MAX_TIME; //최대 점유 시간(분)
@@ -36,11 +37,48 @@ typedef struct libraryData
     int CLOSE_TIME; //문 닫는 시간(시, 분)-분으로 환산
 } LibraryData;
 
-// 전역 변수로 사용자 데이터 저장소 생성
-struct UserData user[SEATS];
+
+
+// 함수 목록
+
+// 초기화 함수
+void init(UserData* user);
+
+// 관리자 모드
+void adminMode(UserData* user, LibraryData* libData);
+
+// 메뉴 선택 함수
+void menuSelect(char* tmp);
+
+// 좌석 배정 시스템 함수
+void seatSelector(char* tmpName, UserData* user, LibraryData* libData);
+
+// 좌석 배정, 연장 및 퇴실 함수
+void setSeat(char* tmpName, int location, UserData* user, LibraryData* libData); // 좌석 배정
+void renewSeat(int location, UserData* user, LibraryData* libData); // 좌석 연장
+void checkOut(int location, UserData* user); // 퇴실
+
+// 좌석 정보 출력 함수
+void printSeatInfo(UserData* user, int isMaster); // 좌석 정보 출력
+void printRenewTime(int location, UserData* user, LibraryData* libData); // 연장가능시각 출력
+void printEndTime(int location, UserData* user); // 이용종료시각 출력
+
+// 관리 함수
+void seatInvalidCheck(UserData* user); // 이용종료시간이 지난 좌석 자동 회수
+void resetSeats(UserData* user); // 모든좌석 초기화
+
+// 보조 함수
+int findUser(char* tmpName, UserData* user); // 이용자가 사용중인 좌석번호 찾기
+int isFull(UserData* user); // 열람실이 가득찼는지 확인
+int isRenewable(int location, UserData* user, LibraryData* libData); // 연장가능시각이 지났는지 확인
+int leftSeconds(LibraryData* libData); // 이용 종료까지 남은 시간(초) 확인
+
+// 함수 목록 끝
+
+
 
 // 좌석 초기화
-void resetSeats()
+void resetSeats(UserData* user)
 {
     for (int i = 0; i < SEATS; i++)
     {
@@ -51,7 +89,7 @@ void resetSeats()
 }
 
 // 종료 시각 출력
-void printEndTime(int location)
+void printEndTime(int location, UserData* user)
 {
     time_t Time;
     struct tm* pTime;
@@ -97,8 +135,8 @@ void printEndTime(int location)
     printf("%d시 %d분 %d초\n", computeHour, computeMinute, computeSecond);
 }
 
-//좌석 정보를 모두 출력
-void printSeatInfo(int isMaster)
+// 좌석 정보를 모두 출력
+void printSeatInfo(UserData* user, int isMaster)
 {
     for (int i = 0; i < SEATS; i++)
     {
@@ -113,7 +151,7 @@ void printSeatInfo(int isMaster)
 }
 
 // 관리자 모드 함수
-void adminMode(LibraryData *libData)
+void adminMode(UserData* user, LibraryData *libData)
 {
     int menu_sel = -1, tmp = 0, oldData = 0;
     while (1)
@@ -123,7 +161,7 @@ void adminMode(LibraryData *libData)
         switch (menu_sel)
         {
         case 1:
-            resetSeats();
+            resetSeats(user);
             break;
         case 2:
             oldData = libData->MAX_TIME;
@@ -204,7 +242,7 @@ void adminMode(LibraryData *libData)
             } while ((libData->CLOSE_TIME < 0 || libData->CLOSE_TIME >= 24 * 60));
             break;
         case 6:
-            printSeatInfo(1);
+            printSeatInfo(user, 1);
             break;
         case 0:
             return;
@@ -223,15 +261,14 @@ void menuSelect(char* tmp)
 }
 
 // 초기화 함수
-void init()
+void init(UserData* user)
 {
-    resetSeats();
+    resetSeats(user);
     return;
 }
 
 // 연장가능 시각 출력
-// 폐장시간 직전에 오류 발생 가능
-void printRenewTime(int location, LibraryData *libData)
+void printRenewTime(int location, UserData* user, LibraryData *libData)
 {
     time_t Time;
     struct tm* pTime;
@@ -331,8 +368,8 @@ void printRenewTime(int location, LibraryData *libData)
     return;
 }
 
-// 이용자명을 이용해 좌석번호를 찾는 함수
-int findUser(char* tmpName)
+// 이용자명을 이용해 좌석번호를 찾는 함수. 좌석이 없는 이용자의 경우 -1 출력.
+int findUser(char* tmpName, UserData* user)
 {
     for (int i = 0; i < SEATS; i++)
     {
@@ -345,7 +382,7 @@ int findUser(char* tmpName)
 }
 
 // 만석인 경우를 찾아서 출력. 만석이면 1 출력.
-int isFull()
+int isFull(UserData* user)
 {
     for (int i = 0; i < SEATS; i++)
     {
@@ -388,7 +425,7 @@ int leftSeconds(LibraryData* libData)
 }
 
 // 좌석 배정
-void setSeat(char* tmpName, int location, LibraryData* libData)
+void setSeat(char* tmpName, int location, UserData* user, LibraryData* libData)
 {
     time_t Time;
     Time = time(NULL);
@@ -403,9 +440,8 @@ void setSeat(char* tmpName, int location, LibraryData* libData)
     return;
 }
 
-//좌석이 연장 가능한지 확인하는 함수(연장 가능시 1 출력)
-//폐장시간 직전에 오류 발생 가능
-int isRenewable(int location, LibraryData* libData)
+//좌석이 연장 가능한지 확인하는 함수. 연장 가능시 1 출력.
+int isRenewable(int location, UserData* user, LibraryData* libData)
 {
     time_t Time;
     struct tm* pTime;
@@ -444,8 +480,8 @@ int isRenewable(int location, LibraryData* libData)
     return (tmpTime <= libData->MAX_RENEWABLE_TIME * 60) && answer;
 }
 
-// 좌석 연장
-void renewSeat(int location, LibraryData* libData)
+// 좌석 연장을 처리하는 함수
+void renewSeat(int location, UserData* user, LibraryData* libData)
 {
     time_t Time;
     Time = time(NULL);
@@ -464,7 +500,7 @@ void renewSeat(int location, LibraryData* libData)
 }
 
 // 퇴실
-void checkOut(int location)
+void checkOut(int location, UserData* user)
 {
     strncpy((user + location)->seatsName, "", 20);
     (user + location)->endTime = 0;
@@ -472,20 +508,20 @@ void checkOut(int location)
 }
 
 // 좌석 배정 시스템
-void seatSelector(char* tmpName, LibraryData* libData)
+void seatSelector(char* tmpName, UserData* user, LibraryData* libData)
 {
-    int location = findUser(tmpName);
+    int location = findUser(tmpName, user);
     int tmpSeatNo = -1, isRenewableRes = 0, tmpMenu = 0;
     if (location == -1) //새로운 사람
     {
-        if (isFull()) // 빈 좌석 없는지 확인
+        if (isFull(user)) // 빈 좌석 없는지 확인
         {
             printf("만석입니다.\n");
             return;
         }
 
         // 좌석 있으면
-        printSeatInfo(0); //User용 좌석 목록 출력
+        printSeatInfo(user, 0); //User용 좌석 목록 출력
         // 좌석 선택
         while (1)
         {
@@ -506,20 +542,20 @@ void seatSelector(char* tmpName, LibraryData* libData)
                 break;
             }
         }
-        setSeat(tmpName, tmpSeatNo, libData); // 좌석 배정
+        setSeat(tmpName, tmpSeatNo, user, libData); // 좌석 배정
 
         // 연장가능시각, 이용종료시각 출력
-        printRenewTime(tmpSeatNo, libData);
-        printEndTime(tmpSeatNo);
+        printRenewTime(tmpSeatNo, user, libData);
+        printEndTime(tmpSeatNo, user);
 
     }else{ //좌석 사용중인 사람
         // 연장 가능여부 확인
-        isRenewableRes = isRenewable(findUser(tmpName), libData);
+        isRenewableRes = isRenewable(findUser(tmpName, user), user, libData);
 
         // 좌석정보, 연장가능시각, 이용종료시각 출력
         printf("%d번 좌석\n", location + 1);
-        printRenewTime(location, libData);
-        printEndTime(location);
+        printRenewTime(location, user, libData);
+        printEndTime(location, user);
 
         // 연장, 퇴실여부 확인
         while (1)
@@ -539,21 +575,21 @@ void seatSelector(char* tmpName, LibraryData* libData)
         }
 
         // 이용자의 좌석정보를 불러옴
-        tmpSeatNo = findUser(tmpName);
+        tmpSeatNo = findUser(tmpName, user);
         switch (tmpMenu)
         {
             // 연장
         case 1:
-            renewSeat(tmpSeatNo, libData);
+            renewSeat(tmpSeatNo, user, libData);
 
             // 좌석 정보 출력
-            printRenewTime(tmpSeatNo, libData);
-            printEndTime(tmpSeatNo);
+            printRenewTime(tmpSeatNo, user, libData);
+            printEndTime(tmpSeatNo, user);
             break;
 
             // 반납
         case 2:
-            checkOut(tmpSeatNo);
+            checkOut(tmpSeatNo, user);
             break;
 
             // 취소
@@ -565,7 +601,7 @@ void seatSelector(char* tmpName, LibraryData* libData)
 }
 
 //좌석이 만료된 경우, 좌석 지정을 해제함
-void seatInvalidCheck()
+void seatInvalidCheck(UserData* user)
 {
     time_t Time;
     Time = time(NULL);
@@ -587,21 +623,24 @@ int main()
     LibraryData libData = { 240, 30, 24 * 60 - 1, 24 * 60 - 1 };
     // 24시간 운영시 OPEN_TIME == CLOSE TIME. 좌석 초기화 없음.
 
+    //사용자 데이터 저장소 생성
+    UserData user[SEATS];
+
     char tmpName[20];
     int tmp_time = 0;
     time_t Time;
     struct tm* pTime;
     Time = time(NULL);
-    init(); //초기화
+    init(user); //초기화
     while (1)
     {
         menuSelect(tmpName);
-        seatInvalidCheck(); //시간 만료되면 자동 퇴실
+        seatInvalidCheck(user); //시간 만료되면 자동 퇴실
 
         Time = time(NULL); // 시간 최신화
         if (tmpName[0] == '0' && strlen(tmpName) == 1)
         {
-            adminMode(&libData);
+            adminMode(user , &libData);
         }else{
             pTime = localtime(&Time);
             tmp_time = (pTime->tm_hour * 60 * 60) + (pTime->tm_min * 60) + (pTime->tm_sec);
@@ -612,7 +651,7 @@ int main()
                 printf("운영시간이 아닙니다.\n");
             }else{
                 //운영시간 내라면(24시간제 포함)
-                seatSelector(tmpName, &libData);
+                seatSelector(tmpName, user, &libData);
             }
         }
 
@@ -625,9 +664,9 @@ int main()
             tmp_time = (pTime->tm_hour * 60 * 60) + (pTime->tm_min * 60) + (pTime->tm_sec);
             if ((tmp_time >= libData.CLOSE_TIME * 60 || tmp_time < libData.OPEN_TIME * 60) && (libData.OPEN_TIME < libData.CLOSE_TIME)) //개장 전이거나 폐장 이후이며 개장시간이 폐장시간보다 빠른 경우.
             {
-                init(); //좌석 초기화
+                init(user); //좌석 초기화
             }else if ((tmp_time >= libData.CLOSE_TIME * 60 && tmp_time < libData.OPEN_TIME * 60) && (libData.OPEN_TIME > libData.CLOSE_TIME)){ //개장 전이거나 폐장 이후이며 폐장시간이 개장시간보다 빠른 경우.
-                init(); //좌석 초기화
+                init(user); //좌석 초기화
             }
         }
     }
