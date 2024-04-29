@@ -10,12 +10,11 @@
 *
 *
 * 문제점(버그)
-* 폐장시간을 앞당기는 경우, 이용시간이 초기화되지 않음.
 * 연장시각이 익일인 경우, 일부 경우에서 익일이라는 표현이 출력되지 않는 오류가 발생함.
 *
 * 
 * 작성자 : YHC03
-* 작성일 : 2024/4/25-2024/4/29
+* 작성일 : 2024/4/25-2024/4/30
 */
 
 // 좌석 수 설정
@@ -66,6 +65,7 @@ void printEndTime(int location, UserData* user); // 이용종료시각 출력
 // 관리 함수
 void seatInvalidCheck(UserData* user); // 이용종료시간이 지난 좌석 자동 회수
 void resetSeats(UserData* user); // 모든좌석 초기화
+void renewSeatEndTime(UserData* user, LibraryData* libData); // 폐장시각 변경 시 이용종료시각 조정
 
 // 보조 함수
 int findUser(char* tmpName, UserData* user); // 이용자가 사용중인 좌석번호 찾기
@@ -150,6 +150,59 @@ void printSeatInfo(UserData* user, int isMaster)
     }
 }
 
+// 폐장시각이 바뀌어 이용종료시각이 폐장시각 이후가 된 경우 조정
+void renewSeatEndTime(UserData* user, LibraryData* libData)
+{
+    time_t Time;
+    struct tm* pTime;
+    Time = time(NULL);
+    pTime = localtime(&Time);
+
+    long long int tmpTime = 0;
+
+    if (libData->OPEN_TIME == libData->CLOSE_TIME) { return; } // 24시간제의 경우, 본 함수가 불필요함
+
+    for (int i = 0; i < SEATS; i++)
+    {
+        if (!((user + i)->endTime)) // endTime = 0, 즉 좌석 미배정 상태인 경우
+        {
+            i++; // 다음 좌석으로 이동
+            if (i >= SEATS) { return; } // for문 범위 초과 시, 함수 종료
+        }
+        tmpTime = (user + i)->endTime - (long long int)(Time);
+
+        if (libData->OPEN_TIME < libData->CLOSE_TIME) // 개장시각이 폐장시각보다 앞에 있는 경우
+        {
+            // 개인별 종료 시각(Unix 초) - 현재 시각(Unix 초) > 폐장 시각(초) - 현재 시각(초) = 남은 시각(초)
+            if (((user + i)->endTime - ((long long int)Time)) >= ((libData->CLOSE_TIME * 60) - (pTime->tm_hour) * 60 * 60 - (pTime->tm_min) * 60 - (pTime->tm_sec))) // 폐장시각이 변경되어 퇴실시각이 폐장시각 이후가 된 경우
+            {
+                // 개인별 종료 시각(Unix 초)을 현재 시각(Unix 초) + 폐장시각까지 남은 시각(초) 으로 변경
+                (user + i)->endTime = (long long int)Time + (libData->CLOSE_TIME * 60) - (pTime->tm_hour) * 60 * 60 - (pTime->tm_min) * 60 - (pTime->tm_sec);
+            }
+        }
+        else if (libData->OPEN_TIME > libData->CLOSE_TIME) {
+            if (((libData->OPEN_TIME * 60) - (pTime->tm_hour) * 60 * 60 - (pTime->tm_min) * 60 - (pTime->tm_sec)) >= 0) // 개장시각이 폐장시각보다 뒤에 있으며, 00시를 지난 경우 (개장 시각 이후)
+            {
+                // 개인별 종료 시각(Unix 초) - 현재 시각(Unix 초) > 폐장 시각(초) - 현재 시각(초) = 남은 시각(초)
+                if (((user + i)->endTime - ((long long int)Time)) > ((libData->CLOSE_TIME * 60) - (pTime->tm_hour) * 60 * 60 - (pTime->tm_min) * 60 - (pTime->tm_sec))) // 폐장시각이 변경되어 퇴실시각이 폐장시각 이후가 된 경우
+                {
+                    // 개인별 종료 시각(Unix 초)을 현재 시각(Unix 초) + 폐장시각까지 남은 시각(초) 으로 변경
+                    (user + i)->endTime = (long long int)Time + (libData->CLOSE_TIME * 60) - (pTime->tm_hour) * 60 * 60 - (pTime->tm_min) * 60 - (pTime->tm_sec);
+                }
+            }
+            else { // 개장시각이 폐장시각보다 뒤에 있으며, 00시를 지나지 않은 경우 (개장 시각 이전)
+                // 개인별 종료 시각(Unix 초) - 현재 시각(Unix 초) > 폐장 시각(초) + 86400 - 현재 시각(초) = 남은 시각(초)
+                if (((user + i)->endTime - ((long long int)Time)) > ((libData->CLOSE_TIME * 60) + 24 * 60 * 60 - (pTime->tm_hour) * 60 * 60 - (pTime->tm_min) * 60 - (pTime->tm_sec))) // 폐장시각이 변경되어 퇴실시각이 폐장시각 이후가 된 경우
+                {
+                    // 개인별 종료 시각(Unix 초)을 현재 시각(Unix 초) + 폐장시각까지 남은 시각(초) 으로 변경
+                    (user + i)->endTime = (long long int)Time + (libData->CLOSE_TIME * 60) - (pTime->tm_hour) * 60 * 60 - (pTime->tm_min) * 60 - (pTime->tm_sec);
+                }
+            }
+
+        }
+    }
+}
+
 // 관리자 모드 함수
 void adminMode(UserData* user, LibraryData *libData)
 {
@@ -160,10 +213,11 @@ void adminMode(UserData* user, LibraryData *libData)
         scanf("%d", &menu_sel);
         switch (menu_sel)
         {
-        case 1:
+        case 1: // 좌석 초기화
             resetSeats(user);
             break;
-        case 2:
+
+        case 2: // 최대 이용 가능 시간 수정
             oldData = libData->MAX_TIME;
             do {
                 libData->MAX_TIME = oldData;
@@ -186,7 +240,8 @@ void adminMode(UserData* user, LibraryData *libData)
                 printf("최대 이용 가능시간 변경으로 인해 연장 가능 시간이 끝나기 %d 시간 %d 분 전으로 변경되었습니다.\n", libData->MAX_RENEWABLE_TIME / 60, libData->MAX_RENEWABLE_TIME % 60);
             }
             break;
-        case 3:
+
+        case 3: // 연장 가능 시간 수정
             oldData = libData->MAX_RENEWABLE_TIME;
             do {
                 libData->MAX_RENEWABLE_TIME = oldData;
@@ -205,7 +260,8 @@ void adminMode(UserData* user, LibraryData *libData)
                 }
             } while ((libData->MAX_RENEWABLE_TIME < 0 || libData->MAX_RENEWABLE_TIME > 24 * 60) || (libData->MAX_TIME < libData->MAX_RENEWABLE_TIME));
             break;
-        case 4:
+
+        case 4: // 개장시각 수정
             oldData = libData->OPEN_TIME;
             do {
                 libData->OPEN_TIME = oldData;
@@ -223,7 +279,9 @@ void adminMode(UserData* user, LibraryData *libData)
                 }
             } while ((libData->OPEN_TIME < 0 || libData->OPEN_TIME >= 24 * 60));
             break;
-        case 5:
+
+        case 5: // 폐장시각 수정
+            printf("경고 : 폐장 시각 단축 시, 폐장 시각 이후로 지정된 모든 사용자의 퇴실 시각은 폐장 시각으로 일괄 변경됩니다.\n");
             oldData = libData->CLOSE_TIME;
             do {
                 libData->CLOSE_TIME = oldData;
@@ -240,13 +298,18 @@ void adminMode(UserData* user, LibraryData *libData)
                     printf("폐장 시각은 0시 0분부터 23시 59분까지로 설정 가능합니다.\n");
                 }
             } while ((libData->CLOSE_TIME < 0 || libData->CLOSE_TIME >= 24 * 60));
+
+            renewSeatEndTime(user, libData); // 폐장 시각을 초과하는 퇴실 시각을 조정함.
             break;
-        case 6:
+
+        case 6: // 모든 좌석 정보 보기
             printSeatInfo(user, 1);
             break;
-        case 0:
+
+        case 0: // 관리자 모드 나가기
             return;
-        default:
+
+        default: // 그 외의 값이 입력된 경우
             printf("잘못된 값을 입력하였습니다.\n");
         }
     }
@@ -526,14 +589,20 @@ void seatSelector(char* tmpName, UserData* user, LibraryData* libData)
         while (1)
         {
             do {
-                printf("좌석 번호 선택 : ");
+                printf("좌석 번호 선택(취소 : 0) : ");
                 scanf("%d", &tmpSeatNo);
                 tmpSeatNo--;
-                if (tmpSeatNo < 0 || tmpSeatNo >= SEATS)
+                if (tmpSeatNo < -1 || tmpSeatNo >= SEATS)
                 {
-                    printf("잘못된 값을 입력하셨습니다.\n");
+                    printf("잘못된 값을 입력하였습니다.\n");
                 }
-            } while (tmpSeatNo < 0 || tmpSeatNo >= SEATS);
+            } while (tmpSeatNo < -1 || tmpSeatNo >= SEATS);
+
+            if (tmpSeatNo == -1) // 0 입력시 취소 (0 - 1 = -1)
+            {
+                printf("좌석 선택을 취소하였습니다.\n");
+                return;
+            }
             // 좌석 찼는지 확인하고
             if (strlen((user + tmpSeatNo)->seatsName))
             {
