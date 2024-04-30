@@ -2,7 +2,7 @@
 #include <string.h>
 #include <time.h>
 
-/* 열람실 좌석관리시스템
+/* 열람실 좌석관리 시스템
 *
 * 이용 방법
 * 이용자명 입력 -> 좌석 선택 -> 이용시간 부여
@@ -10,12 +10,12 @@
 * 종료시각까지만 좌석 부여 후 자동 좌석 퇴실 처리
 *
 * 작성자 : YHC03
-* 작성일 : 2024/4/25-2024/4/30
+* 작성일 : 2024/4/25-2024/5/1
 */
 
 
 #define SEATS 10 // 좌석 수 설정
-#define MAX_NAME_LENGTH 20 // 이용자 이름의 최대 길이 설정
+#define MAX_NAME_LENGTH 20 // 이용자명의 최대 길이 설정
 
 // 좌석 정보를 저장하는 구조체 생성
 typedef struct seatsData
@@ -262,6 +262,7 @@ void renewSeatEndTime(SeatsData* libSeats, LibraryData* libData)
         tmpTime = (libSeats + i)->endTime - (long long int)(Time);
 
         // 개장시각과 폐장시각에 따라 구분
+        // 24시간제의 경우, 폐장시각으로 인해 연장 불가능한 경우가 없으으로 해당 조건문에서 구분하지 않음.
         if (libData->OPEN_TIME < libData->CLOSE_TIME) // 개장시각이 폐장시각보다 앞에 있는 경우
         {
             // 개인별 종료 시각(Unix 초) - 현재 시각(Unix 초) = 남은 시간(초) > 폐장 시각(초) - 현재 시각(초) = 남은 시각(초) 인 경우, 이용종료시각 조정이 필요함
@@ -332,12 +333,12 @@ void adminMode(SeatsData* libSeats, LibraryData *libData)
         * 
         * 1 : 좌석 초기화
         * 2 : 최대 이용 가능 시간 수정
-        * 3: 연장 가능 시간 수정
+        * 3 : 연장 가능 시간 수정
         * 4 : 개장시각 수정
-        * 5: 폐장시각 수정
-        * 6: 모든 좌석 정보 보기
-        * 7: 좌석 이용불가 설정
-        * 0: 관리자 모드 나가기
+        * 5 : 폐장시각 수정
+        * 6 : 모든 좌석 정보 보기
+        * 7 : 좌석 이용불가 설정
+        * 0 : 관리자 모드 나가기
         */
 
         // 관리자 모드의 메뉴 출력 및 입력값 입력
@@ -377,7 +378,7 @@ void adminMode(SeatsData* libSeats, LibraryData *libData)
                 {
                     printf("최대 이용 가능 시간은 1분 이상 24시간 이하여야 합니다.\n");
                 }
-            } while (libData->MAX_TIME <= 0 || libData->MAX_TIME > 24 * 60); // 정상적인 입력값이 입력될때까지 반복
+            } while (libData->MAX_TIME <= 0 || libData->MAX_TIME > 24 * 60); // 옳은 입력값이 입력될때까지 반복
 
             // 새 최대 이용가능 시간이 최대 연장가능 시간을 초과하는 경우
             if (libData->MAX_TIME < libData->MAX_RENEWABLE_TIME)
@@ -416,89 +417,131 @@ void adminMode(SeatsData* libSeats, LibraryData *libData)
                     printf("연장 가능 시간은 0분 이상 24시간 이하여야 하며, 최대 이용 가능 시간을 초과할 수 없습니다.\n");
                 }
 
-            } while ((libData->MAX_RENEWABLE_TIME < 0 || libData->MAX_RENEWABLE_TIME > 24 * 60) || (libData->MAX_TIME < libData->MAX_RENEWABLE_TIME)); // 정상적인 입력값이 입력될때까지 반복
+            } while ((libData->MAX_RENEWABLE_TIME < 0 || libData->MAX_RENEWABLE_TIME > 24 * 60) || (libData->MAX_TIME < libData->MAX_RENEWABLE_TIME)); // 옳은 입력값이 입력될때까지 반복
 
             break;
 
         case 4: // 개장시각 수정
+
+            // 기존 개장시각 저장
             oldData = libData->OPEN_TIME;
+
+            if (libData->OPEN_TIME == libData->CLOSE_TIME) // 기존 운영방식이 24시간제인 경우
+            {
+                // 경고문 출력
+                printf("경고 : 개장 시각과 폐장 시각이 달라지는 경우, 폐장 시각 이후로 지정된 모든 이용자의 퇴실 시각은 폐장 시각으로 일괄 변경됩니다.\n");
+            }
+
             do {
+                // 기존 개장시각 복원. 이는 잘못된 값을 입력받았을 때 복원하는 용도로 이용된다.
                 libData->OPEN_TIME = oldData;
-                if (libData->OPEN_TIME == libData->CLOSE_TIME) // 기존 이용시각이 24시간제인 경우
-                {
-                    // 경고문 출력
-                    printf("경고 : 개장 시각과 폐장 시각이 달라지는 경우, 폐장 시각 이후로 지정된 모든 이용자의 퇴실 시각은 폐장 시각으로 일괄 변경됩니다.\n");
-                }
+
+                // 기존값 출력 및 신규값 입력
                 printf("현재 개장 시각 : %d시 %d분, 현재 폐장 시각 : %d시 %d분\n", libData->OPEN_TIME / 60, libData->OPEN_TIME % 60, libData->CLOSE_TIME / 60, libData->CLOSE_TIME % 60);
                 printf("개장 시각 수정(폐장 시각과 동일하면 24시간) 시간 : ");
-                scanf("%d", &tmpTime);
-                libData->OPEN_TIME = tmpTime * 60;
+                scanf("%d", &tmpTime); // 시간 단위 입력
+                libData->OPEN_TIME = tmpTime * 60; // 시간 단위를 분단위로 환산 후 저장
                 printf("분 : ");
-                scanf("%d", &tmpTime);
-                libData->OPEN_TIME += tmpTime;
+                scanf("%d", &tmpTime); // 분단위 입력
+                libData->OPEN_TIME += tmpTime; // 저장된 시간 단위 입력값에 분단위 입력값 추가
 
+                // 잘못된 값인지 확인
                 if (libData->OPEN_TIME < 0 || libData->OPEN_TIME >= 24 * 60)
                 {
                     printf("개장 시각은 0시 0분부터 23시 59분까지로 설정 가능합니다.\n");
                 }
-            } while ((libData->OPEN_TIME < 0 || libData->OPEN_TIME >= 24 * 60));
+            } while ((libData->OPEN_TIME < 0 || libData->OPEN_TIME >= 24 * 60)); // 옳은 입력값이 입력될때까지 반복
 
-            renewSeatEndTime(libSeats, libData); // 폐장 시각을 초과하는 퇴실 시각을 조정함. 24시간제인 경우, 해당 함수가 작동하지 않음.
+            // 폐장 시각을 초과하는 퇴실 시각을 조정함. 24시간제인 경우, 해당 함수가 작동하지 않음.
+            renewSeatEndTime(libSeats, libData);
             break;
 
         case 5: // 폐장시각 수정
+
+            // 경고문 출력
             printf("경고 : 폐장 시각 단축 시, 폐장 시각 이후로 지정된 모든 이용자의 퇴실 시각은 폐장 시각으로 일괄 변경됩니다.\n");
+
+            // 기존 폐장시각 저장
             oldData = libData->CLOSE_TIME;
+
             do {
+                // 기존 폐장시각 복원. 이는 잘못된 값을 입력받았을 때 복원하는 용도로 이용된다.
                 libData->CLOSE_TIME = oldData;
+
+                // 기존값 출력 및 신규값 입력
                 printf("현재 개장 시각 : %d시 %d분, 현재 폐장 시각 : %d시 %d분\n", libData->OPEN_TIME / 60, libData->OPEN_TIME % 60, libData->CLOSE_TIME / 60, libData->CLOSE_TIME % 60);
                 printf("폐장 시각 수정(개장 시각과 동일하면 24시간) 시간 : ");
-                scanf("%d", &tmpTime);
-                libData->CLOSE_TIME = tmpTime * 60;
+                scanf("%d", &tmpTime); // 시간 단위 입력
+                libData->CLOSE_TIME = tmpTime * 60; // 시간 단위를 분단위로 환산 후 저장
                 printf("분 : ");
-                scanf("%d", &tmpTime);
-                libData->CLOSE_TIME += tmpTime;
+                scanf("%d", &tmpTime); // 분단위 입력
+                libData->CLOSE_TIME += tmpTime; // 저장된 시간 단위 입력값에 분단위 입력값 추가
 
+                // 잘못된 값인지 확인.
                 if (libData->CLOSE_TIME < 0 || libData->CLOSE_TIME >= 24 * 60)
                 {
                     printf("폐장 시각은 0시 0분부터 23시 59분까지로 설정 가능합니다.\n");
                 }
-            } while ((libData->CLOSE_TIME < 0 || libData->CLOSE_TIME >= 24 * 60));
+            } while ((libData->CLOSE_TIME < 0 || libData->CLOSE_TIME >= 24 * 60)); // 옳은 입력값이 입력될때까지 반복
 
-            renewSeatEndTime(libSeats, libData); // 폐장 시각을 초과하는 퇴실 시각을 조정함.
+            // 폐장 시각을 초과하는 퇴실 시각을 조정함.
+            renewSeatEndTime(libSeats, libData);
             break;
 
         case 6: // 모든 좌석 정보 보기
+
+            // 모든 좌석의 정보를 관리자 모드로 출력함.
             printSeatInfo(libSeats, 1);
             break;
 
         case 7: // 좌석 이용불가 설정
+
+            // 무한 반복, 좌석 이용불가 설정 종료(0 입력)시 break으로 설정 종료
             while (1)
             {
+                // 모든 좌석의 정보를 관리자 모드로 출력함.
                 printSeatInfo(libSeats, 1);
+
+                // 이용불가 설정을 수정할 좌석 번호를 입력받을 변수를 -2로 초기화
                 tmpSeatNo = -2;
+
                 do {
-                    printf("이용불가상태를 바꿀 좌석을 선택하세요.(종료 : 0) : ");
+                    // 이용불가 설정을 수정할 좌석 번호를 입력받음.
+                    printf("이용불가 설정을 바꿀 좌석을 선택하세요.(종료 : 0) : ");
                     scanf("%d", &tmpSeatNo);
+
+                    // 입력받은 1부터 시작하는 좌석 번호를 0으로 시작하는 좌석 번호로 변환 
                     tmpSeatNo--;
+
+                    // 잘못된 좌석 번호인 경우(1부터 시작하는 좌석번호 입력값 기준 0(종료)부터 SEATS(마지막 좌석번호)까지의 범위를 벗어난 경우)
                     if (tmpSeatNo < -1 || tmpSeatNo >= SEATS)
                     {
                         printf("잘못된 값을 입력하였습니다.\n");
                     }
-                } while (tmpSeatNo < -1 || tmpSeatNo >= SEATS);
+                } while (tmpSeatNo < -1 || tmpSeatNo >= SEATS); // 옳은 입력값이 입력될때까지 반복
 
-                if (tmpSeatNo == -1) // 0 입력시 종료 (0 - 1 = -1)
+                // 0을 입력받은 경우 좌석 이용불가 설정을 종료 (0 - 1 = -1)
+                if (tmpSeatNo == -1)
                 {
                    break;
                 }
-                if (((libSeats + tmpSeatNo)->endTime) > 0) // 이미 이용중인 좌석의 경우 좌석 초기화 진행
+
+                // 이미 이용중인 좌석의 경우 좌석 초기화를 진행함
+                if (((libSeats + tmpSeatNo)->endTime) > 0) // 이미 이용중인 좌석(종료시각이 0 이상인 경우)
                 {
-                    strcpy(((libSeats + tmpSeatNo)->seatsName), "");
+                    // 좌석 이용자명 정보를 초기화함
+                    strncpy(((libSeats + tmpSeatNo)->seatsName), "", MAX_NAME_LENGTH);
+
+                    // 좌석 이용종료시각 정보를 초기화함
                     ((libSeats + tmpSeatNo)->endTime) = 0;
                 }
-                ((libSeats + tmpSeatNo)->endTime) = -1 - ((libSeats + tmpSeatNo)->endTime); // 0인 경우 -1(설정)로, -1인 경우 0(해제)으로 변경
+
+                // endTime이 0(이용가능)인 경우 -1(이용불가)로, -1(이용불가)인 경우 0(이용가능)으로 변경
+                ((libSeats + tmpSeatNo)->endTime) = -1 - ((libSeats + tmpSeatNo)->endTime);
             }
+
             break;
+
         case 0: // 관리자 모드 나가기
             return;
 
@@ -510,134 +553,207 @@ void adminMode(SeatsData* libSeats, LibraryData *libData)
     return;
 }
 
-// 메뉴 입력 함수
+
+/*
+* menuSelect 함수
+* 기능 : 메인 메뉴에서 이용자명 입력값을 받이 반환함
+* 입력값 : 이용자명을 반환할 문자열 포인터 *tmp
+* 반환값 : *tmp으로 입력받은 문자열 반환
+* 설명 최종 수정 일자 : 2024/05/01
+*/
 void menuSelect(char* tmp)
 {
+    // 이용자 정보를 입력받음
     printf("이용자 정보를 입력하세요.(관리자 모드: 0) : ");
     scanf("%s", tmp);
+
     return;
 }
 
-// 초기화 함수
+
+/*
+* init 함수
+* 기능 : 프로그램 최초 실행 시 실행되어 초기화 등을 진행함
+* 입력값 : 좌석 정보 구조체 포인터 *libSeats
+* 반환값 없음
+* 설명 최종 수정 일자 : 2024/05/01
+*/
 void init(SeatsData* libSeats)
 {
+    // 모든 좌석을 빈좌석으로 초기화함.
     resetSeats(libSeats, 1);
+
     return;
 }
 
-// 연장가능 시각 출력
+
+/*
+* printRenewTime 함수
+* 기능 : 주어진 좌석번호의 연장가능시각을 출력함.
+* 입력값 : location(0번부터 시작하는 좌석번호), 좌석 정보 구조체 포인터 *libSeats, 시설 정보 구조체 포인터 *libData
+* 반환값 없음
+* 설명 최종 수정 일자 : 2024/05/01
+*/
 void printRenewTime(int location, SeatsData* libSeats, LibraryData *libData)
 {
+    // 현재 시간 관련 변수 선언
     time_t Time;
     struct tm* pTime;
     Time = time(NULL);
     pTime = localtime(&Time);
 
-    int isTomorrow = 0; // 익일 여부 판단
+    // 익일 여부를 판단하기 위한 변수 선언
+    int isTomorrow = 0; // 1인 경우 익일이며, 0인 경우 익일이 아님.
 
-    // 빈자리 처리
+    // 빈자리의 경우 함수를 종료함.
     if (!strlen((libSeats + location)->seatsName))
     {
         return;
     }
 
-    // 남은 시간
+    // 남은 시간 계산
+    // 종료 시각(Unix 초) - 현재 시각(Unix 초)의 방법으로 계산하며, 결괏값은 초 단위이다.
     long long int remainSecondOrig = (libSeats + location)->endTime - ((long long int)Time);
     int remainHour = remainSecondOrig / 3600;
     int remainMinute = (remainSecondOrig % 3600) / 60;
     int remainSecond = remainSecondOrig % 60;
 
-    // 현재 시각
+    // 현재 시각 가져오기
     pTime = localtime(&Time);
     int currHour = pTime->tm_hour;
     int currMin = pTime->tm_min;
     int currSecond = pTime->tm_sec;
 
     // 연장 시각 계산
+    // 현재 시각에 남은 시간을 더한 후, 연장가능시각을 뺀다.
+    // 종료시각에서부터 현재시각의 차이가 연장가능시각보다 작을 때 연장이 가능하다.
     int computeSecond = remainSecond + currSecond;
     int computeMinute = remainMinute + currMin - (libData->MAX_RENEWABLE_TIME % 60);
     int computeHour = remainHour + currHour - (libData->MAX_RENEWABLE_TIME / 60);
 
+    // 개장시각과 폐장시각에 따라 구분
+    // 24시간제의 경우, 폐장시각으로 인해 연장 불가능한 경우가 없으으로 해당 조건문에서 구분하지 않음.
     if (libData->OPEN_TIME < libData->CLOSE_TIME) // 개장시각이 폐장시각보다 앞에 있는 경우
     {
-        // 종료 시각(초) - 현재 시각(초) >= 폐장 시각(초) - 현재 시각(초) = 남은 시각(초)
-        if (((libSeats + location)->endTime - ((long long int)Time)) >= ((libData->CLOSE_TIME * 60) - currHour * 60 * 60 - currMin * 60 - currSecond)) // 종료시간이 임박하여 연장불가한 경우
+        // 종료 시각(초) - 현재 시각(초) = 남은 시각(초) >= 폐장 시각(초) - 현재 시각(초) = 남은 시각(초) 인 경우, 좌석 연장이 불가능함
+
+        // 종료시간이 임박하여 연장불가한 경우, 연장 불가능하다는 내용을 출력한 후, 함수를 종료함.
+        if (((libSeats + location)->endTime - ((long long int)Time)) >= ((libData->CLOSE_TIME * 60) - currHour * 60 * 60 - currMin * 60 - currSecond))
         {
             printf("연장 불가\n");
             return;
         }
-    }else if (libData->OPEN_TIME > libData->CLOSE_TIME){
+
+    }else if (libData->OPEN_TIME > libData->CLOSE_TIME){ // 개장시각이 폐장시각보다 뒤에 있는 경우
+
         if (((libData->OPEN_TIME * 60) - currHour * 60 * 60 - currMin * 60 - currSecond) >= 0) // 개장시각이 폐장시각보다 뒤에 있으며, 00시를 지난 경우 (개장 시각 이후)
         {
-            // 종료 시각(초) - 현재 시각(초) >= 폐장 시각(초) - 현재 시각(초) = 남은 시각(초)
-            if (((libSeats + location)->endTime - ((long long int)Time)) >= ((libData->CLOSE_TIME * 60) - currHour * 60 * 60 - currMin * 60 - currSecond)) // 종료시간이 임박하여 연장불가한 경우
+            // 종료 시각(초) - 현재 시각(초) = 남은 시각(초) >= 폐장 시각(초) - 현재 시각(초) = 남은 시각(초) 인 경우, 좌석 연장이 불가능함
+            
+            // 종료시간이 임박하여 연장불가한 경우, 연장 불가능하다는 내용을 출력한 후, 함수를 종료함.
+            if (((libSeats + location)->endTime - ((long long int)Time)) >= ((libData->CLOSE_TIME * 60) - currHour * 60 * 60 - currMin * 60 - currSecond))
             {
                 printf("연장 불가\n");
                 return;
             }
+
         }else{ // 개장시각이 폐장시각보다 뒤에 있으며, 00시를 지나지 않은 경우 (개장 시각 이전)
-            // 종료 시각(초) - 현재 시각(초) >= 폐장 시각(초) + 86400 - 현재 시각(초) = 남은 시각(초)
-            if (((libSeats + location)->endTime - ((long long int)Time)) >= ((libData->CLOSE_TIME * 60) + 24 * 60 * 60 - currHour * 60 * 60 - currMin * 60 - currSecond)) // 종료시간이 임박하여 연장불가한 경우
+
+            // 종료 시각(초) - 현재 시각(초) = 남은 시각(초) >= 폐장 시각(초) + 86400 - 현재 시각(초) = 남은 시각(초) 인 경우, 좌석 연장이 불가능함
+
+            // 종료시간이 임박하여 연장불가한 경우, 연장 불가능하다는 내용을 출력한 후, 함수를 종료함.
+            if (((libSeats + location)->endTime - ((long long int)Time)) >= ((libData->CLOSE_TIME * 60) + 24 * 60 * 60 - currHour * 60 * 60 - currMin * 60 - currSecond))
             {
                 printf("연장 불가\n");
                 return;
             }
+
         }
         
-    } // 24시간제의 경우 여기서 처리되지 않음
+    }
     
+
+    // 종료 시각의 초단위 값이 60 이상인 경우, 이를 조절한다.
     if (computeSecond >= 60)
     {
-        computeMinute += computeSecond / 60;
-        computeSecond %= 60;
+        computeMinute += computeSecond / 60; // 종료 시각의 시단위 값이 24 이상인 경우, 이를 조절한다.
+        computeSecond %= 60; // 초단위 값은 60 미만의 값만을 처리한다.
     }
+
+    // 종료 시각의 분단위 값이 60 이상인 경우, 이를 조절한다.
     if (computeMinute >= 60)
     {
-        computeHour += computeMinute / 60;
-        computeMinute %= 60;
+        computeHour += computeMinute / 60; // 분단위 값 초과분 만큼 시단위 값을 증가시킨다.
+        computeMinute %= 60; // 분단위 값은 60 미만의 값만을 처리한다.
     }
+
+    // 종료 시각의 시단위 값이 24 이상인 경우, 이를 조절한다.
     if (computeHour >= 24)
     {
-        computeHour %= 24;
-        isTomorrow = 1;
+        computeHour %= 24; // 분단위 값은 60 미만의 값만을 처리한다.
+        isTomorrow = 1; // 이 경우 익일이므로, 익일임을 표시하는 변수에 익일임을 표시한다.
     }
 
+    // 연장가능시각의 시, 분단위 값이 0 미만인 경우, 이를 조절한다. 초단위의 경우, 연장가능시각이 분단위이므로, 음수가 되지 않는다.
+
+    // 이를 분단위값과 시간 단위 값이 모두 0 이상일때까지 반복한다.
     while (computeMinute < 0 || computeHour < 0)
     {
+        // 연장가능시각의 분단위 값이 0 미만인 경우, 이를 조절한다.
         if (computeMinute < 0)
         {
-            computeHour--;
-            computeMinute += 60;
+            computeHour--; // 분단위 값이 0 미만이므로 시간 단위 값을 1 감소시킨다.
+            computeMinute += 60; // 시간 단위 값을 1 감소시켰으므로, 분단위 값을 60 증가시킨다.
         }
+
+        // 연장가능시각의 분단위 값이 0 미만인 경우, 이를 조절한다.
         if (computeHour < 0)
         {
-            computeHour += 24;
-            isTomorrow = 0;
+            computeHour += 24; // 시간 단위 값을 24 증가시킨다.
+            isTomorrow = 0; // 시간 단위 값을 24 증가시켰으므로, 더이상 익일이 아니다. 따라서, 익일임을 표시하는 변수에 익일이 아님을 표시한다.
         }
     }
 
+    // 연장가능시각 문자를 출력한다.
     printf("연장 가능 시각 : ");
+
+    // 익일인 경우, 익일임을 출력한다.
     if (isTomorrow)
     {
         printf("익일 ");
     }
+
+    // 남은 연장가능시각의 정보를 출력한다.
     printf("%d시 %d분 %d초\n", computeHour, computeMinute, computeSecond);
 
     return;
 }
 
-// 이용자명을 이용해 좌석번호를 찾는 함수. 좌석이 없는 이용자의 경우 -1 출력.
+
+/*
+* findUser 함수
+* 기능 : 주어진 이름의 이용자가 이용하는 좌석번호(0부터 시작)을 출력함.
+* 입력값 : *tmpName(찾을 이름이 저장된 문자열의 주소), 좌석 정보 구조체 포인터 *libSeats
+* 반환값 : 해당 이름을 가진 이용자의 좌석번호(0부터 시작). 해당 이용자가 좌석을 배정받지 않은 경우 -1을 반환함.
+* 설명 최종 수정 일자 : 2024/05/01
+*/
 int findUser(char* tmpName, SeatsData* libSeats)
 {
+    // 모든 좌석에 대해서 반복
     for (int i = 0; i < SEATS; i++)
     {
+        // 주어진 이름의 이용자명이 발견된 경우
         if (!strcmp((libSeats+i)->seatsName, tmpName))
         {
+            // 해당 좌석번호(0부터 시작) 반환
             return i;
         }
     }
+
+    // 해당 이용자가 없으면 -1 반환
     return -1;
 }
+
 
 // 만석인 경우를 찾아서 출력. 만석이면 1 출력.
 int isFull(SeatsData* libSeats)
@@ -710,6 +826,8 @@ int isRenewable(int location, SeatsData* libSeats, LibraryData* libData)
 
     long long int tmpTime = (libSeats + location)->endTime - (long long int)(Time);
 
+    // 개장시각과 폐장시각에 따라 구분
+    // 24시간제의 경우, 폐장시각으로 인해 연장 불가능한 경우가 없으으로 해당 조건문에서 구분하지 않음.
     if (libData->OPEN_TIME < libData->CLOSE_TIME) // 개장시각이 폐장시각보다 앞에 있는 경우
     {
         // 개인별 종료 시각(Unix 초) - 현재 시각(Unix 초) >= 폐장 시각(초) - 현재 시각(초) = 남은 시각(초)
@@ -733,7 +851,7 @@ int isRenewable(int location, SeatsData* libSeats, LibraryData* libData)
             }
         }
 
-    } // 24시간제의 경우 여기서 처리되지 않음
+    }
 
     return (tmpTime <= libData->MAX_RENEWABLE_TIME * 60) && answer;
 }
