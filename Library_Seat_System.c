@@ -20,7 +20,7 @@
 typedef struct seatsData
 {
     char seatsName[20]; // 좌석 사용자명 기록, ""(strlen=0)이면 빈 좌석
-    long long int endTime; //사용 종료시각 기록(Unix 시간) - 초 단위
+    long long int endTime; //사용 종료시각 기록(Unix 시간) - 초 단위, 해당 값이 0인 경우 빈 좌석, -1인 경우 이용불가 좌석
 } SeatsData;
 
 // 열람실 운영정보를 저장하는 구조체 생성
@@ -74,12 +74,18 @@ int leftSeconds(LibraryData* libData); // 이용 종료까지 남은 시간(초)
 
 
 // 좌석 초기화
-void resetSeats(SeatsData* libSeats)
+void resetSeats(SeatsData* libSeats, int isFirst)
 {
     for (int i = 0; i < SEATS; i++)
     {
         strncpy((libSeats + i)->seatsName, "", 20);
-        (libSeats + i)->endTime = 0;
+        if (isFirst)
+        {
+            (libSeats + i)->endTime = 0;
+        }
+        else if ((libSeats + i)->endTime > 0) { // 이용불가 좌석은 최초 초기화가 아닌 경우 초기화하지 않음
+            (libSeats + i)->endTime = 0;
+        }
     }
     return;
 }
@@ -134,15 +140,37 @@ void printEndTime(int location, SeatsData* libSeats)
 // 좌석 정보를 모두 출력
 void printSeatInfo(SeatsData* libSeats, int isMaster)
 {
+    char info[30] = "";
     for (int i = 0; i < SEATS; i++)
     {
         if (isMaster) // 관리자 여부 확인
         {
-            printf("%d번 좌석 : %s\n", i + 1, strlen((libSeats + i)->seatsName) ? (libSeats + i)->seatsName : "Empty");
+            if ((libSeats + i)->endTime == -1)
+            {
+                strcpy(info, "Unavailable");
+            }else{
+                if ((libSeats + i)->endTime)
+                {
+                    strcpy(info, "User ");
+                    strcat(info, (libSeats + i)->seatsName);
+                }else{
+                    strcpy(info, "Empty");
+                }
+            }
+        }else{
+            if ((libSeats + i)->endTime == -1)
+            {
+                strcpy(info, "Unavailable");
+            }else{
+                if ((libSeats + i)->endTime)
+                {
+                    strcpy(info, "Used");
+                }else{
+                    strcpy(info, "Empty");
+                }
+            }
         }
-        else {
-            printf("%d번 좌석 : %s\n", i + 1, strlen((libSeats + i)->seatsName) ? "Used" : "Empty");
-        }
+        printf("%d번 좌석: %s\n", i + 1, info);
     }
 }
 
@@ -160,7 +188,7 @@ void renewSeatEndTime(SeatsData* libSeats, LibraryData* libData)
 
     for (int i = 0; i < SEATS; i++)
     {
-        if (!((libSeats + i)->endTime)) // endTime = 0, 즉 좌석 미배정 상태인 경우
+        if (((libSeats + i)->endTime) > 0) // endTime > 0, 즉 좌석 미배정 혹은 이용불가 상태인 경우
         {
             i++; // 다음 좌석으로 이동
             if (i >= SEATS) { return; } // for문 범위 초과 시, 함수 종료
@@ -202,15 +230,15 @@ void renewSeatEndTime(SeatsData* libSeats, LibraryData* libData)
 // 관리자 모드 함수
 void adminMode(SeatsData* libSeats, LibraryData *libData)
 {
-    int menu_sel = -1, tmp = 0, oldData = 0;
+    int menu_sel = -1, tmp = 0, oldData = 0, tmpSeatNo = 0;
     while (1)
     {
-        printf("1 : 좌석 초기화, 2 : 최대 이용 가능 시간 수정, 3: 연장 가능 시간 수정, 4 : 개장시각 수정, 5: 폐장시각 수정, 6: 모든 좌석 정보 보기, 0: 나가기 : ");
+        printf("1 : 좌석 초기화, 2 : 최대 이용 가능 시간 수정, 3: 연장 가능 시간 수정, 4 : 개장시각 수정, 5: 폐장시각 수정, 6: 모든 좌석 정보 보기, 7: 좌석 이용불가 설정, 0: 나가기 : ");
         scanf("%d", &menu_sel);
         switch (menu_sel)
         {
         case 1: // 좌석 초기화
-            resetSeats(libSeats);
+            resetSeats(libSeats, 0);
             break;
 
         case 2: // 최대 이용 가능 시간 수정
@@ -302,6 +330,33 @@ void adminMode(SeatsData* libSeats, LibraryData *libData)
             printSeatInfo(libSeats, 1);
             break;
 
+        case 7: // 좌석 이용불가 설정
+            while (1)
+            {
+                printSeatInfo(libSeats, 1);
+                tmpSeatNo = -2;
+                do {
+                    printf("이용불가상황을 바꿀 좌석을 선택하세요.(종료 : 0) : ");
+                    scanf("%d", &tmpSeatNo);
+                    tmpSeatNo--;
+                    if (tmpSeatNo < -1 || tmpSeatNo >= SEATS)
+                    {
+                        printf("잘못된 값을 입력하였습니다.\n");
+                    }
+                } while (tmpSeatNo < -1 || tmpSeatNo >= SEATS);
+
+                if (tmpSeatNo == -1) // 0 입력시 종료 (0 - 1 = -1)
+                {
+                   break;
+                }
+                if (((libSeats + tmpSeatNo)->endTime) > 0) // 이미 이용중인 좌석의 경우 좌석 초기화 진행
+                {
+                    strcpy(((libSeats + tmpSeatNo)->seatsName), "");
+                    ((libSeats + tmpSeatNo)->endTime) = 0;
+                }
+                ((libSeats + tmpSeatNo)->endTime) = -1 - ((libSeats + tmpSeatNo)->endTime); // 0인 경우 -1(설정)로, -1인 경우 0(해제)으로 변경
+            }
+            break;
         case 0: // 관리자 모드 나가기
             return;
 
@@ -322,7 +377,7 @@ void menuSelect(char* tmp)
 // 초기화 함수
 void init(SeatsData* libSeats)
 {
-    resetSeats(libSeats);
+    resetSeats(libSeats, 1);
     return;
 }
 
@@ -445,7 +500,7 @@ int isFull(SeatsData* libSeats)
 {
     for (int i = 0; i < SEATS; i++)
     {
-        if (!strlen((libSeats + i)->seatsName)) // 빈 좌석 발견 시
+        if (((libSeats + i)->endTime) == 0) // 빈 좌석 발견 시
         {
             return 0;
         }
@@ -603,6 +658,8 @@ void seatSelector(char* tmpName, SeatsData* libSeats, LibraryData* libData)
             if (strlen((libSeats + tmpSeatNo)->seatsName))
             {
                 printf("이미 사용중인 좌석입니다.\n다른 좌석을 선택해주세요.\n");
+            }else if ((libSeats + tmpSeatNo)->endTime == -1){
+                printf("이용불가 좌석입니다.\n다른 좌석을 선택하세요.\n");
             }else{
                 break;
             }
@@ -674,7 +731,7 @@ void seatInvalidCheck(SeatsData* libSeats)
     for (int i = 0; i < SEATS; i++)
     {
         // Unix 시간 기준이므로, 다음날 구분은 자동으로 가능함.
-        if (((libSeats + i)->endTime < (int)Time) && (libSeats + i)->endTime) //(libSeats + i)->endTime=0(미배정)은 예외
+        if (((libSeats + i)->endTime < (int)Time) && (libSeats + i)->endTime > 0) //(libSeats + i)->endTime=0(미배정)과 -1(이용불가)은 예외
         {
             strncpy((libSeats + i)->seatsName, "", 20);
             (libSeats + i)->endTime = 0;
