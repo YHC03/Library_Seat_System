@@ -8,7 +8,7 @@
 * README.md 참조
 *
 * 작성자 : YHC03
-* 작성일 : 2024/4/25-2024/5/1
+* 작성일 : 2024/4/25-2024/6/5
 */
 
 
@@ -59,7 +59,7 @@ void printEndTime(int location, SeatsData* libSeats); // 이용종료시각 출�
 
 // 관리 함수
 void seatInvalidCheck(SeatsData* libSeats); // 이용종료시간이 지난 좌석 자동 회수
-void resetSeats(SeatsData* libSeats); // 모든좌석 초기화
+void resetSeats(SeatsData* libSeats, int isFirst); // 모든좌석 초기화
 void renewSeatEndTime(SeatsData* libSeats, LibraryData* libData); // 폐장시각 변경 시 이용종료시각 조정
 
 // 보조 함수
